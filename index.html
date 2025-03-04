@@ -1,521 +1,493 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <script src="https://d3js.org/d3.v5.min.js"></script>
-        <title>Unraveling Glucose Patterns</title>
-        <style>
-            html,
-            body {
-                margin: 0;
-                padding: 0;
-                width: 100%;
-                height: 100%;
-                overflow: hidden;
-                font-family: sans-serif;
-            }
-            #controls {
-                position: absolute;
-                top: 120px;
-                left: 50%;
-                transform: translateX(-50%);
-                z-index: 10;
-                background: rgba(255, 255, 255, 0.8);
-                padding: 10px;
-                border-radius: 8px;
-            }
-            #controls label {
-                font-size: larger;
-                font-weight: bold;
-            }
+  <head>
+    <meta charset="UTF-8" />
+    <title>Unraveling Glucose Patterns</title>
+    <!-- D3 & Scrollama -->
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://unpkg.com/scrollama"></script>
 
-            /* "Learn More" link in the top-right corner */
-            #learnMoreLink {
-                position: absolute;
-                top: 20px;
-                right: 20px;
-                z-index: 999;
-                background-color: #fff;
-                padding: 10px 15px;
-                border: 1px solid #000;
-                border-radius: 8px;
-                text-decoration: none;
-                color: #000;
-                font-weight: bold;
-                /* box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5); */
-            }
-            #learnMoreLink:hover {
-                background-color: #f0f0f0;
-            }
-        </style>
-    </head>
+    <style>
+      /* Allow scrolling (no overflow:hidden) */
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+      }
 
-    <body>
-        <!-- "Learn More" link to writeup.html -->
-        <a id="learnMoreLink" href="writeup.html" target="_blank">
-            Learn More
-        </a>
-        <div id="controls">
-            <label for="daySlider">
-                Select Day:
-                <span id="dayValue">1</span>
-            </label>
-            <input
-                type="range"
-                id="daySlider"
-                min="1"
-                max="10"
-                step="1"
-                value="1"
-            />
-            <button id="animateButton">▶ Animate</button>
-        </div>
+      /* "Learn More" link in the top-right corner */
+      #learnMoreLink {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 999;
+        background-color: #fff;
+        padding: 10px 15px;
+        border: 1px solid #000;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #000;
+        font-weight: bold;
+      }
+      #learnMoreLink:hover {
+        background-color: #f0f0f0;
+      }
 
-        <script>
-            const margin = [130, 100, 100, 150];
-            let width = window.innerWidth,
-                height = window.innerHeight;
+      /* Title/Caption at the top */
+      #titleSection {
+        width: 100%;
+        text-align: center;
+        padding: 60px 20px 20px;
+        box-sizing: border-box;
+      }
+      #mainTitle {
+        font-size: 28px;
+        font-weight: bold;
+        margin-bottom: 10px;
+      }
+      #subtitle {
+        font-size: 15px;
+        max-width: 700px;
+        margin: 0 auto;
+        line-height: 1.4em;
+      }
 
-            let svg, tooltip, simulation, circles;
-            let currentDay = 1;
-            let globalData = [];
+      /* Pinned chart container */
+      #chartContainer {
+        position: sticky;
+        top: 0;
+        width: 100%;
+        height: 100vh; /* chart stays pinned at full window height */
+        background: #fff;
+        z-index: 1;
+      }
+      /* Our SVG fills the pinned container */
+      #chart {
+        width: 100%;
+        height: 100%;
+      }
 
-            // Hard-coded quartiles for BMI
-            const BMI_QUARTILES = [27, 30, 35];
-            const diabetesCategories = [
-                "Non-Diabetic",
-                "Pre-Diabetic",
-                "Type 2 Diabetic",
-            ];
+      /* Day indicator pinned on top of chart (optional) */
+      #dayIndicator {
+        position: absolute;
+        top: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 32px;
+        font-weight: bold;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 6px 12px;
+        border-radius: 4px;
+        pointer-events: none; /* so mouse events pass through */
+        display: none;       /* show once we scroll to the first day */
+      }
 
-            // Discrete color mapping for gut health => 1,2,3
-            const gutColors = {
-                1: "#a8c8ea", // light blue
-                2: "#4f93d2", // medium
-                3: "#084594", // dark
-            };
+      /* SCROLLY steps (one per day) */
+      #scrolly {
+        width: 100%;
+      }
+      .step {
+        min-height: 100vh; /* each step is a full screen so the user can scroll through them */
+        padding: 2rem 1rem;
+        box-sizing: border-box;
+      }
+      .step h2 {
+        margin-bottom: 1rem;
+      }
+    </style>
+  </head>
 
-            // We'll keep a reference for yScale to debug
-            let yScale;
+  <body>
+    <!-- "Learn More" link to writeup.html -->
+    <a id="learnMoreLink" href="writeup.html" target="_blank">Learn More</a>
 
-            function initChart(data) {
-                d3.select("svg").remove();
+    <!-- Title & subtitle -->
+    <div id="titleSection">
+      <div id="mainTitle">Unraveling Glucose Patterns: A 10-Day Look at Diabetes & Health</div>
+      <div id="subtitle">
+        This plot compares the average glucose levels of patients categorized by diabetic status,
+        with bubble size representing BMI and color indicating gut health status over 10 days.
+        Biggest Takeaway: Type 2 diabetics show much higher variability in average glucose levels,
+        while non-diabetic and pre-diabetic groups have more stable glucose levels.
+      </div>
+    </div>
 
-                width = window.innerWidth;
-                height = window.innerHeight;
+    <!-- Pinned chart container -->
+    <div id="chartContainer">
+      <svg id="chart"></svg>
+      <div id="dayIndicator">Day 1</div>
+    </div>
 
-                svg = d3
-                    .select("body")
-                    .append("svg")
-                    .attr("width", width)
-                    .attr("height", height);
+    <!-- Scrolling text for each day -->
+    <div id="scrolly">
+      <div class="step" data-day="1">
+        <h2>Day 1</h2>
+        <p>Observations about Day 1. For example: Non-Diabetics cluster around X mg/dL...</p>
+      </div>
+      <div class="step" data-day="2">
+        <h2>Day 2</h2>
+        <p>Observations about Day 2...</p>
+      </div>
+      <div class="step" data-day="3">
+        <h2>Day 3</h2>
+        <p>Observations about Day 3...</p>
+      </div>
+      <div class="step" data-day="4">
+        <h2>Day 4</h2>
+        <p>Observations about Day 4...</p>
+      </div>
+      <div class="step" data-day="5">
+        <h2>Day 5</h2>
+        <p>Observations about Day 5...</p>
+      </div>
+      <div class="step" data-day="6">
+        <h2>Day 6</h2>
+        <p>Observations about Day 6...</p>
+      </div>
+      <div class="step" data-day="7">
+        <h2>Day 7</h2>
+        <p>Observations about Day 7...</p>
+      </div>
+      <div class="step" data-day="8">
+        <h2>Day 8</h2>
+        <p>Observations about Day 8...</p>
+      </div>
+      <div class="step" data-day="9">
+        <h2>Day 9</h2>
+        <p>Observations about Day 9...</p>
+      </div>
+      <div class="step" data-day="10">
+        <h2>Day 10</h2>
+        <p>Concluding remarks about Day 10...</p>
+      </div>
+    </div>
 
-                // Tooltip
-                tooltip = d3
-                    .select("body")
-                    .append("div")
-                    .style("position", "absolute")
-                    .style("visibility", "hidden")
-                    .style("background", "#fff")
-                    .style("padding", "8px")
-                    .style("border", "1px solid #000")
-                    .style("border-radius", "5px")
-                    .style("box-shadow", "2px 2px 10px rgba(0,0,0,0.5)")
-                    .style("pointer-events", "none");
+    <script>
+      /**********************************************
+       *  1) GLOBAL VARIABLES
+       **********************************************/
+      let svg, tooltip, simulation, circles;
+      let currentDay = 1;
+      let globalData = [];
+      let yScale;
 
-                // Title
-                svg.append("text")
-                    .attr("x", width / 2)
-                    .attr("y", margin[0] / 2)
-                    .attr("text-anchor", "middle")
-                    .style("font-size", "28px")
-                    .style("font-weight", "bold")
-                    // .text("D3 Swarm - Day Slider (Discrete GH)");
-                    .text(
-                        "Unraveling Glucose Patterns: A 10-Day Look at Diabetes & Health"
-                    );
+      // Categories, color scales, etc.
+      const diabetesCategories = ["Non-Diabetic", "Pre-Diabetic", "Type 2 Diabetic"];
+      const gutColors = { 1: "#a8c8ea", 2: "#4f93d2", 3: "#084594" };
+      const healthLabels = { 1: "Healthy", 2: "Moderate", 3: "Unhealthy" };
 
-                const annotation = [
-                    "This plot compares the average glucose levels of patients categorized as by diabetic status, with bubble size representing BMI and color indicating gut health status over 10 days.",
-                    "Biggest Takeaway: Type 2 diabetics show much higher variability in average glucose levels. Non-diabetic and pre-diabetic groups have more stable glucose levels.",
-                ];
-                // Subtitle
-                svg.append("text")
-                    .attr("x", width / 2)
-                    .attr("y", margin[0] / 2 + 30)
-                    .attr("text-anchor", "middle")
-                    .style("font-size", "15px")
-                    .selectAll("tspan")
-                    .data(annotation)
-                    .enter()
-                    .append("tspan")
-                    .attr("x", width / 2) // Keep x position the same
-                    .attr("dy", (d, i) => i * 20) // ✅ Move each line down
-                    .text((d) => d);
+      /**********************************************
+       *  2) INIT CHART
+       **********************************************/
+      function initChart(data) {
+        // Remove any existing content from #chart
+        d3.select("#chart").selectAll("*").remove();
+        d3.selectAll(".tooltip").remove(); // remove old tooltips if any
 
-                // Gather all day columns
-                let allDays = [];
-                for (let i = 1; i <= 10; i++) {
-                    const col = "day" + i;
-                    data.forEach((d) => allDays.push(d[col]));
-                }
-                let maxDayVal = d3.max(allDays) || 100;
-                if (maxDayVal < 0) maxDayVal = 100;
+        // Dimensions from the pinned container
+        const container = document.getElementById("chartContainer");
+        const width = container.clientWidth;
+        const height = container.clientHeight;
 
-                // x-scale
-                let xScale = d3
-                    .scaleBand()
-                    .domain(diabetesCategories)
-                    .range([margin[3], width - margin[1]])
-                    .padding(0.5);
+        // Create an SVG
+        svg = d3.select("#chart")
+          .attr("width", width)
+          .attr("height", height);
 
-                // y-scale
-                yScale = d3
-                    .scaleLinear()
-                    .domain([0, maxDayVal])
-                    .range([height - margin[2], margin[0]]);
+        // Tooltip
+        tooltip = d3.select("body")
+          .append("div")
+          .style("position", "absolute")
+          .style("visibility", "hidden")
+          .style("background", "#fff")
+          .style("padding", "8px")
+          .style("border", "1px solid #000")
+          .style("border-radius", "5px")
+          .style("box-shadow", "2px 2px 10px rgba(0,0,0,0.5)")
+          .style("pointer-events", "none");
 
-                // size scale for BMI
-                let bmiExtent = d3.extent(data, (d) => d.bmi);
-                let sizeScale = d3
-                    .scaleLinear()
-                    .domain(bmiExtent)
-                    .range([3, 20])
-                    .clamp(true);
+        // MARGINS
+        const margin = { top: 130, right: 100, bottom: 100, left: 150 };
+        const innerWidth = width - margin.left - margin.right;
+        const innerHeight = height - margin.top - margin.bottom;
 
-                // Axes
-                svg.append("g")
-                    .attr("transform", `translate(0, ${height - margin[2]})`)
-                    .call(d3.axisBottom(xScale))
-                    .selectAll("text")
-                    .style("text-anchor", "middle")
-                    .style("font-size", "16px");
+        // Gather max glucose across all days
+        let allDays = [];
+        for (let i = 1; i <= 10; i++) {
+          data.forEach(d => allDays.push(d["day" + i]));
+        }
+        let maxDayVal = d3.max(allDays) || 100;
+        if (maxDayVal < 0) maxDayVal = 100;
 
-                svg.append("g")
-                    .attr("transform", `translate(${margin[3]},0)`)
-                    .call(d3.axisLeft(yScale))
-                    .selectAll("text")
-                    .style("font-size", "16px");
+        // Scales
+        const xScale = d3.scaleBand()
+          .domain(diabetesCategories)
+          .range([margin.left, margin.left + innerWidth])
+          .padding(0.5);
 
-                // trying to get labels to show up
-                // x axis label
-                svg.append("text")
-                    .attr("x", width / 2)
-                    .attr("y", height - margin[2] + 50)
-                    .attr("text-anchor", "middle")
-                    .style("font-size", "18px")
-                    .text("Diabetes Status");
-                // y axis label
-                svg.append("text")
-                    .attr("x", -height / 2)
-                    .attr("y", margin[3] - 70)
-                    .attr("text-anchor", "middle")
-                    .attr("transform", "rotate(-90)")
-                    .style("font-size", "18px")
-                    .text("Avgerage Glucose Level (mg/dL)");
+        yScale = d3.scaleLinear()
+          .domain([0, maxDayVal])
+          .range([margin.top + innerHeight, margin.top]);
 
-                // Single force sim with moderate y strength for smoother transitions
-                simulation = d3
-                    .forceSimulation(data)
-                    .force(
-                        "x",
-                        d3
-                            .forceX((d) => {
-                                if (
-                                    !diabetesCategories.includes(
-                                        d.diabetes_status
-                                    )
-                                ) {
-                                    return width / 2;
-                                }
-                                return (
-                                    xScale(d.diabetes_status) +
-                                    xScale.bandwidth() / 2
-                                );
-                            })
-                            .strength(0.2)
-                    )
-                    // day columns => y
-                    .force(
-                        "y",
-                        d3
-                            .forceY((d) => {
-                                return yScale(d["day" + currentDay] || 0);
-                            })
-                            .strength(0.4)
-                    ) // more gentle than 2
-                    .force(
-                        "collide",
-                        d3.forceCollide((d) => {
-                            return d.bmi > 0 ? sizeScale(d.bmi) : 3;
-                        })
-                    )
-                    .alphaDecay(0)
-                    .alpha(0.3)
-                    .on("tick", ticked);
+        const bmiExtent = d3.extent(data, d => d.bmi);
+        const sizeScale = d3.scaleLinear()
+          .domain(bmiExtent)
+          .range([3, 20])
+          .clamp(true);
 
-                circles = svg
-                    .selectAll(".circ")
-                    .data(data)
-                    .enter()
-                    .append("circle")
-                    .attr("stroke", "black")
-                    // color => discrete gut(1,2,3)
-                    .attr("fill", (d) => {
-                        let gh = d.gut_microbiome_health;
-                        return gutColors[gh] || "#999";
-                    })
-                    .attr("r", (d) => (d.bmi > 0 ? sizeScale(d.bmi) : 3))
-                    .style("opacity", 0.7)
-                    .on("mouseover", function (d) {
-                        tooltip.style("visibility", "visible");
-                        d3.select(this)
-                            .transition()
-                            .duration(200)
-                            .style("opacity", 1);
-                    })
-                    .on("mousemove", function (d) {
-                        let healthStatus =
-                            healthLabels[d.gut_microbiome_health] || "Unknown";
-                        let e = d3.event;
-                        tooltip.html(`
-            <b>ID:</b> ${d.participant_id}<br/>
-            Gender: ${d.gender} <br/>
-            Age: ${d.age}<br/>
-            Gut: ${healthStatus} <br/>
-            BMI: ${d.bmi.toFixed(2)}<br/>
-            Avg. Glucose Level: ${d["day" + currentDay].toFixed(2)}<br/>
-                        `);
-                        let tipW = tooltip.node().offsetWidth;
-                        let tipH = tooltip.node().offsetHeight;
-                        tooltip
-                            .style("left", e.pageX + "px")
-                            .style("top", e.pageY - tipH + "px");
-                    })
-                    .on("mouseout", function (d) {
-                        tooltip.style("visibility", "hidden");
-                        d3.select(this)
-                            .transition()
-                            .duration(200)
-                            .style("opacity", 0.7);
-                    });
+        // Axes
+        const xAxis = d3.axisBottom(xScale);
+        const yAxis = d3.axisLeft(yScale);
 
-                // alpha decay after 3s
-                setTimeout(() => simulation.alphaDecay(0.1), 3000);
+        svg.append("g")
+          .attr("transform", `translate(0, ${margin.top + innerHeight})`)
+          .call(xAxis)
+          .selectAll("text")
+          .style("font-size", "14px");
 
-                // ========== Combined Legend Box ========== //
-                let legendBox = svg
-                    .append("g")
-                    .attr(
-                        "transform",
-                        `translate(${width - 270}, ${margin[0] + 50})`
-                    );
+        svg.append("g")
+          .attr("transform", `translate(${margin.left}, 0)`)
+          .call(yAxis)
+          .selectAll("text")
+          .style("font-size", "14px");
 
-                // Adjusted Box Size for More Space
-                legendBox
-                    .append("rect")
-                    .attr("width", 240) // Slightly wider to prevent text overflow
-                    .attr("height", 450) // Increased height for better spacing
-                    .attr("fill", "white")
-                    .attr("stroke", "black")
-                    .attr("rx", 10)
-                    .attr("ry", 10)
-                    .attr("opacity", 0.8);
+        // Axis labels
+        svg.append("text")
+          .attr("x", margin.left + innerWidth / 2)
+          .attr("y", margin.top + innerHeight + 50)
+          .attr("text-anchor", "middle")
+          .style("font-size", "16px")
+          .text("Diabetes Status");
 
-                // Title: "Key"
-                legendBox
-                    .append("text")
-                    .attr("x", 120) // Centered inside the box
-                    .attr("y", 30)
-                    .attr("text-anchor", "middle")
-                    .style("font-size", "16px")
-                    .style("font-weight", "bold")
-                    .text("Key");
-                // underline for the "Key"
-                legendBox
-                    .append("line")
-                    .attr("x1", 105)
-                    .attr("x2", 135)
-                    .attr("y1", 35)
-                    .attr("y2", 35)
-                    .attr("stroke", "black")
-                    .attr("stroke-width", 1);
+        svg.append("text")
+          .attr("x", - (margin.top + innerHeight / 2))
+          .attr("y", margin.left - 70)
+          .attr("text-anchor", "middle")
+          .attr("transform", "rotate(-90)")
+          .style("font-size", "16px")
+          .text("Average Glucose Level (mg/dL)");
 
-                // ========== BMI Legend (More Space) ========== //
-                let BMIlegend = legendBox
-                    .append("g")
-                    .attr("transform", `translate(10, 80)`); // Slightly shifted
+        // Force simulation
+        simulation = d3.forceSimulation(data)
+          .force("x",
+            d3.forceX(d => xScale(d.diabetes_status) + xScale.bandwidth() / 2).strength(0.2)
+          )
+          .force("y",
+            d3.forceY(d => yScale(d["day" + currentDay] || 0)).strength(0.4)
+          )
+          .force("collide",
+            d3.forceCollide(d => (d.bmi > 0 ? sizeScale(d.bmi) : 3))
+          )
+          .alphaDecay(0)
+          .alpha(0.3)
+          .on("tick", ticked);
 
-                BMIlegend.append("text")
-                    .attr("x", 0)
-                    .attr("y", -10)
-                    .style("font-size", "14px")
-                    .style("font-weight", "bold")
-                    .text("BMI Sizes");
+        // Draw circles
+        circles = svg.selectAll(".circ")
+          .data(data)
+          .enter()
+          .append("circle")
+          .attr("class", "circ")
+          .attr("stroke", "black")
+          .attr("fill", d => gutColors[d.gut_microbiome_health] || "#999")
+          .attr("r", d => (d.bmi > 0 ? sizeScale(d.bmi) : 3))
+          .style("opacity", 0.7)
+          .on("mouseover", function(d) {
+            tooltip.style("visibility", "visible");
+            d3.select(this).transition().duration(200).style("opacity", 1);
+          })
+          .on("mousemove", function(d) {
+            let e = d3.event;
+            let healthStatus = healthLabels[d.gut_microbiome_health] || "Unknown";
+            tooltip.html(`
+              <b>ID:</b> ${d.participant_id}<br/>
+              Gender: ${d.gender}<br/>
+              Age: ${d.age}<br/>
+              Gut: ${healthStatus}<br/>
+              BMI: ${d.bmi.toFixed(2)}<br/>
+              Avg. Glucose (Day ${currentDay}): ${d["day" + currentDay].toFixed(2)}
+            `);
+            let tipH = tooltip.node().offsetHeight;
+            tooltip
+              .style("left", e.pageX + "px")
+              .style("top", (e.pageY - tipH - 5) + "px");
+          })
+          .on("mouseout", function() {
+            tooltip.style("visibility", "hidden");
+            d3.select(this).transition().duration(200).style("opacity", 0.7);
+          });
 
-                // ========== Gut Health Legend (More Space) ========== //
-                let GHlegend = legendBox
-                    .append("g")
-                    .attr("transform", `translate(10, 350)`); // Shifted down further
+        // Let the simulation decay after 3s
+        setTimeout(() => simulation.alphaDecay(0.1), 3000);
 
-                GHlegend.append("text")
-                    .attr("x", 0)
-                    .attr("y", -10)
-                    .style("font-size", "14px")
-                    .style("font-weight", "bold")
-                    .text("Gut Health");
+        /****************************************
+         *  LEGEND: top-right corner
+         ****************************************/
+        const legendBox = svg
+          .append("g")
+          .attr("transform", `translate(${width - 270}, ${margin.top + 50})`);
 
-                const healthLabels = {
-                    1: "Healthy",
-                    2: "Moderate",
-                    3: "Unhealthy",
-                };
-                [1, 2, 3].forEach((v, i) => {
-                    let gg = GHlegend.append("g").attr(
-                        "transform",
-                        `translate(0, ${i * 35 + 10})`
-                    ); // More spacing
+        legendBox.append("rect")
+          .attr("width", 240)
+          .attr("height", 450)
+          .attr("fill", "white")
+          .attr("stroke", "black")
+          .attr("rx", 10)
+          .attr("ry", 10)
+          .attr("opacity", 0.8);
 
-                    gg.append("rect")
-                        .attr("x", 0)
-                        .attr("y", -10)
-                        .attr("width", 20)
-                        .attr("height", 20)
-                        .attr("fill", gutColors[v] || "#999")
-                        .style("opacity", 0.7)
-                        .attr("stroke", "black");
+        // Title: "Key"
+        legendBox.append("text")
+          .attr("x", 120)
+          .attr("y", 30)
+          .attr("text-anchor", "middle")
+          .style("font-size", "16px")
+          .style("font-weight", "bold")
+          .text("Key");
 
-                    gg.append("text")
-                        .attr("x", 30)
-                        .attr("y", 5)
-                        .style("font-size", "14px")
-                        .text(healthLabels[v]);
-                });
+        // Underline for "Key"
+        legendBox.append("line")
+          .attr("x1", 105)
+          .attr("x2", 135)
+          .attr("y1", 35)
+          .attr("y2", 35)
+          .attr("stroke", "black")
+          .attr("stroke-width", 1);
 
-                // use quartiles 27,30,35
-                const BMI_VALUES = [20, 25, 30, 35, 40, 50]; // Expanded range for better scaling
-                BMI_VALUES.forEach((b, i) => {
-                    let g = BMIlegend.append("g").attr(
-                        "transform",
-                        `translate(20, ${i * 38})`
-                    ); // Adjust spacing
+        // BMI legend
+        let BMIlegend = legendBox
+          .append("g")
+          .attr("transform", "translate(10, 80)");
 
-                    g.append("circle")
-                        .attr("cx", 30) // Slightly right for better alignment
-                        .attr("cy", 0)
-                        .attr("r", sizeScale(b)) // Use size scale to adjust circle size
-                        .attr("fill", "gray")
-                        .attr("stroke", "black")
-                        .style("opacity", 0.7);
+        BMIlegend.append("text")
+          .attr("x", 0)
+          .attr("y", -10)
+          .style("font-size", "14px")
+          .style("font-weight", "bold")
+          .text("BMI Sizes");
 
-                    g.append("text")
-                        .attr("x", 70) // Position text to the right
-                        .attr("y", 5)
-                        .style("font-size", "14px")
-                        .text(`BMI: ${b}`);
-                });
-            }
+        // Gut Health legend
+        let GHlegend = legendBox
+          .append("g")
+          .attr("transform", "translate(10, 350)");
 
-            function ticked() {
-                circles.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
-            }
+        GHlegend.append("text")
+          .attr("x", 0)
+          .attr("y", -10)
+          .style("font-size", "14px")
+          .style("font-weight", "bold")
+          .text("Gut Health");
 
-            function updateDay(day) {
-                currentDay = day;
-                if (!simulation) return;
+        [1, 2, 3].forEach((v, i) => {
+          let gg = GHlegend.append("g")
+            .attr("transform", `translate(0, ${i * 35 + 10})`);
 
-                console.log(`Update to day${day}`);
-                globalData.forEach((d) => {
-                    console.log(d.participant_id, " => ", d["day" + day]);
-                });
+          gg.append("rect")
+            .attr("x", 0)
+            .attr("y", -10)
+            .attr("width", 20)
+            .attr("height", 20)
+            .attr("fill", gutColors[v] || "#999")
+            .style("opacity", 0.7)
+            .attr("stroke", "black");
 
-                // reassign y force with gentler strength
-                simulation.force(
-                    "y",
-                    d3
-                        .forceY((d) => {
-                            let val = d["day" + day] || 0;
-                            return yScale(val);
-                        })
-                        .strength(0.4) // gentler
-                );
-                // moderate re-energize
-                simulation.alpha(0.5).restart();
-            }
+          gg.append("text")
+            .attr("x", 30)
+            .attr("y", 5)
+            .style("font-size", "14px")
+            .text(healthLabels[v]);
+        });
 
-            // animation
-            let animationInterval = null;
-            let isAnimating = false; // Flag to track animation state
+        // Show multiple BMI examples
+        const BMI_VALUES = [20, 25, 30, 35, 40, 50];
+        BMI_VALUES.forEach((b, i) => {
+          let g = BMIlegend.append("g")
+            .attr("transform", `translate(20, ${i * 38})`);
 
-            function animateSlider() {
-                let slider = document.getElementById("daySlider");
-                let maxDay = 10;
+          g.append("circle")
+            .attr("cx", 30)
+            .attr("cy", 0)
+            .attr("r", sizeScale(b))
+            .attr("fill", "gray")
+            .attr("stroke", "black")
+            .style("opacity", 0.7);
 
-                if (isAnimating) {
-                    // If currently animating, pause the animation
-                    clearInterval(animationInterval);
-                    animationInterval = null;
-                    isAnimating = false;
-                } else {
-                    // If currently paused, resume the animation
-                    isAnimating = true;
+          g.append("text")
+            .attr("x", 70)
+            .attr("y", 5)
+            .style("font-size", "14px")
+            .text(`BMI: ${b}`);
+        });
+      }
 
-                    animationInterval = setInterval(() => {
-                        if (currentDay > maxDay) {
-                            // clearInterval(animationInterval); // Stop at maxDay
-                            // animationInterval = null; // Clear reference
-                            // isAnimating = false;
-                            // return;
-                            currentDay = 1; // Reset to 1
-                        }
+      function ticked() {
+        circles.attr("cx", d => d.x).attr("cy", d => d.y);
+      }
 
-                        console.log(`Animating Day: ${currentDay}`); // Debug log
-                        slider.value = currentDay; // Move the slider
-                        document.getElementById("dayValue").textContent =
-                            currentDay;
-                        updateDay(currentDay); // Update visualization
+      /**********************************************
+       *  3) UPDATE DAY
+       **********************************************/
+      function updateDay(day) {
+        currentDay = day;
+        if (!simulation) return;
 
-                        currentDay++;
-                    }, 600); // 1 second per step
-                }
-            }
+        simulation.force(
+          "y",
+          d3.forceY(d => yScale(d["day" + day] || 0)).strength(0.4)
+        );
+        simulation.alpha(0.5).restart();
 
-            document.addEventListener("DOMContentLoaded", () => {
-                document
-                    .getElementById("animateButton")
-                    .addEventListener("click", animateSlider);
-            });
+        // Show or update the pinned day indicator
+        const dayIndicator = document.getElementById("dayIndicator");
+        dayIndicator.textContent = `Day ${day}`;
+        dayIndicator.style.display = "block";
+      }
 
-            d3.csv("data.csv").then((data) => {
-                data.forEach((d) => {
-                    for (let i = 1; i <= 10; i++) {
-                        let col = "day" + i;
-                        d[col] = +d[col] || 0; // parse numeric
-                    }
-                    d.bmi = +d.bmi || 0;
-                    // discrete GH = 1,2,3
-                    d.gut_microbiome_health = +d.gut_microbiome_health || 1;
-                });
-                globalData = data;
-                initChart(data);
-            });
+      /**********************************************
+       *  4) SCROLLAMA SETUP
+       **********************************************/
+      function handleStepEnter(response) {
+        // Get the day from data-day attribute
+        const day = +response.element.getAttribute("data-day");
+        updateDay(day);
+      }
 
-            // slider
-            const daySlider = document.getElementById("daySlider");
-            const dayValue = document.getElementById("dayValue");
-            daySlider.addEventListener("input", function () {
-                let newDay = +this.value;
-                dayValue.textContent = newDay;
-                updateDay(newDay);
-            });
+      function initScroller() {
+        const scroller = scrollama();
+        scroller
+          .setup({
+            step: ".step",
+            offset: 0.6, // triggers near 60% of viewport
+            debug: false
+          })
+          .onStepEnter(handleStepEnter);
+      }
 
-            // On resize, re-init
-            window.addEventListener("resize", () => {
-                if (!globalData.length) return;
-                initChart(globalData);
-                updateDay(currentDay);
-            });
-        </script>
-    </body>
+      /**********************************************
+       *  5) LOAD DATA & INIT
+       **********************************************/
+      d3.csv("data.csv").then(data => {
+        // Parse numeric fields
+        data.forEach(d => {
+          for (let i = 1; i <= 10; i++) {
+            d["day" + i] = +d["day" + i] || 0;
+          }
+          d.bmi = +d.bmi || 0;
+          d.gut_microbiome_health = +d.gut_microbiome_health || 1;
+        });
+        globalData = data;
+
+        // Initialize chart + scroller
+        initChart(globalData);
+        initScroller();
+      });
+
+      // Re-init on resize
+      window.addEventListener("resize", () => {
+        if (!globalData.length) return;
+        initChart(globalData);
+        updateDay(currentDay);
+      });
+    </script>
+  </body>
 </html>
