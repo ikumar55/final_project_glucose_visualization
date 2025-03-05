@@ -8,14 +8,14 @@
     <script src="https://unpkg.com/scrollama"></script>
 
     <style>
-      /* Allow scrolling (no overflow:hidden) */
+      /* Base styles */
       html, body {
         margin: 0;
         padding: 0;
         font-family: sans-serif;
       }
 
-      /* "Learn More" link in the top-right corner */
+      /* "Learn More" link */
       #learnMoreLink {
         position: absolute;
         top: 20px;
@@ -33,7 +33,7 @@
         background-color: #f0f0f0;
       }
 
-      /* Title/Caption at the top */
+      /* Title & subtitle */
       #titleSection {
         width: 100%;
         text-align: center;
@@ -52,22 +52,27 @@
         line-height: 1.4em;
       }
 
-      /* Pinned chart container */
+      /* Chart container remains sticky during scrolly */
       #chartContainer {
         position: sticky;
         top: 0;
         width: 100%;
-        height: 100vh; /* chart stays pinned at full window height */
+        height: 100vh; /* full viewport height during scrolly */
         background: #fff;
         z-index: 1;
+        transition: top 0.5s ease;
       }
-      /* Our SVG fills the pinned container */
+      /* When the dummy step triggers exit, slide the chart container out of view */
+      #chartContainer.exit {
+        top: -100vh;
+      }
+      /* SVG fills the container */
       #chart {
         width: 100%;
         height: 100%;
       }
 
-      /* Day indicator pinned on top of chart (optional) */
+      /* Day indicator */
       #dayIndicator {
         position: absolute;
         top: 100px;
@@ -82,10 +87,10 @@
         display: none;
       }
 
-      /* Annotation container (fixed position for scroll-triggered annotations) */
+      /* Annotation container */
       #annotation {
         position: fixed;
-        top: 150px;
+        top: 130px;
         right: 20px;
         max-width: 300px;
         background: rgba(255, 255, 255, 0.8);
@@ -96,11 +101,11 @@
         font-size: 14px;
       }
 
-      /* SCROLLY steps (one per day) */
+      /* Scrolly steps */
       #scrolly {
         width: 100%;
-        /* Ensure the container is tall enough to allow scrolling past all steps */
-        min-height: calc(100vh * 10);
+        /* Ensure enough scroll space for 10 steps plus dummy step */
+        min-height: calc(100vh * 10 + 10vh);
       }
       .step {
         min-height: 100vh;
@@ -111,7 +116,13 @@
         margin-bottom: 1rem;
       }
 
-      /* Static Annotation Section (normal flow element) */
+      /* Dummy step (invisible, used for triggering exit) */
+      .dummy {
+        min-height: 10vh; /* reduced from 50vh */
+        opacity: 0;
+      }
+
+      /* Static Annotation Section */
       #staticAnnotation {
         max-width: 800px;
         margin: 2rem auto;
@@ -155,7 +166,7 @@
     <!-- Scroll-triggered Annotation container -->
     <div id="annotation"></div>
 
-    <!-- Scrolling text for each day -->
+    <!-- Scrolly narrative steps -->
     <div id="scrolly">
       <div class="step" data-day="1">
         <h2>Day 1</h2>
@@ -197,63 +208,62 @@
         <h2>Day 10</h2>
         <p>Concluding remarks about Day 10...</p>
       </div>
+      <!-- Dummy step triggers the exit from scrolly behavior -->
+      <div class="step dummy" data-day="end"></div>
     </div>
 
-    <!-- Static Annotation Section (appears after scrolly content) -->
+    <!-- Static Annotation Section (normal page content after the scrolly) -->
     <div id="staticAnnotation">
       <h2>Next Visualization</h2>
       <p>
-        Diabetes and insulin resistance develop over years as the body starts to struggle to regulate blood sugar effectively. Diet plays a very crucial role in this process as different foods affect glucose levels in unique ways. Everyone’s body responds to food differently and can cause different levels of glucose spikes. By recognizing how fat, sugar, and carbohydrates impact blood sugar, we gain a better understanding of glucose patterns amongst different diabetic statuses. The next visualization explores these effects in more detail.
+        Diabetes and insulin resistance develop over years as the body starts to struggle to regulate blood sugar effectively.
+        Diet plays a very crucial role in this process as different foods affect glucose levels in unique ways.
+        Everyone’s body responds to food differently and can cause different levels of glucose spikes.
+        By recognizing how fat, sugar, and carbohydrates impact blood sugar, we gain a better understanding of glucose patterns
+        amongst different diabetic statuses. The next visualization explores these effects in more detail.
       </p>
     </div>
 
     <script>
       /**********************************************
-       *  1) GLOBAL VARIABLES
+       * GLOBAL VARIABLES
        **********************************************/
       let svg, tooltip, simulation, circles;
       let currentDay = 1;
       let globalData = [];
       let yScale;
 
-      // Categories, color scales, etc.
+      // Categories and color scales
       const diabetesCategories = ["Non-Diabetic", "Pre-Diabetic", "Type 2 Diabetic"];
       const gutColors = { 1: "#a8c8ea", 2: "#4f93d2", 3: "#084594" };
       const healthLabels = { 1: "Healthy", 2: "Moderate", 3: "Unhealthy" };
 
       /**********************************************
-       *  Annotation Texts (Scroll-Triggered Only)
+       * Annotation Texts for Scrolly Steps
        **********************************************/
       const annotations = {
-        // Intro (Day 1)
         1: `Blood sugar follows patterns, and these patterns matter. Frequent spikes and crashes can lead to fatigue, cravings, and long-term damage to blood vessels, even in those who appear healthy. Tracking glucose variability offers a deeper understanding of metabolic health, revealing risks that a single reading might miss.`,
-        // Between Day 2 and 3 (assigned to Day 2)
         2: `At first glance, the glucose levels appear steady, but stability doesn’t always mean balance. For those with prediabetes or Type 2 diabetes, a seemingly normal glucose level can still mask underlying insulin resistance and unhealthy glucose levels.`,
-        // Between Day 8 and 9 (assigned to Day 8)
         8: `The degree of variability can help indicate metabolic health. In this visualization, you can see how the variability of glucose levels between non-diabetics, prediabetics, and Type 2 diabetics range.`,
-        // Day 10 scroll-triggered annotation (with CDC info)
         10: `Observing the variability in glucose levels across different diabetic categories highlights just how drastically blood sugar control can differ from person to person. According to the CDC, 1 in 3 adults in the U.S. has prediabetes, but 80% are unaware of it. Understanding what influences glucose levels and tracking glucose variability can serve as an early warning sign and help individuals take proactive steps toward a healthier lifestyle. <a href="https://www.cdc.gov/diabetes/communication-resources/1-in-3-americans.html" target="_blank">Learn more at CDC</a>`
       };
 
       /**********************************************
-       *  2) INIT CHART
+       * INIT CHART
        **********************************************/
       function initChart(data) {
-        // Remove any existing content from #chart
+        // Clear previous chart content
         d3.select("#chart").selectAll("*").remove();
-        d3.selectAll(".tooltip").remove(); // remove old tooltips if any
+        d3.selectAll(".tooltip").remove();
 
-        // Dimensions from the pinned container
         const container = document.getElementById("chartContainer");
         const width = container.clientWidth;
         const height = container.clientHeight;
 
-        // Create an SVG
         svg = d3.select("#chart")
           .attr("width", width)
           .attr("height", height);
 
-        // Tooltip
         tooltip = d3.select("body")
           .append("div")
           .style("position", "absolute")
@@ -265,12 +275,11 @@
           .style("box-shadow", "2px 2px 10px rgba(0,0,0,0.5)")
           .style("pointer-events", "none");
 
-        // MARGINS
         const margin = { top: 130, right: 100, bottom: 100, left: 150 };
         const innerWidth = width - margin.left - margin.right;
         const innerHeight = height - margin.top - margin.bottom;
 
-        // Gather max glucose across all days
+        // Calculate max glucose value across all 10 days
         let allDays = [];
         for (let i = 1; i <= 10; i++) {
           data.forEach(d => allDays.push(d["day" + i]));
@@ -278,7 +287,6 @@
         let maxDayVal = d3.max(allDays) || 100;
         if (maxDayVal < 0) maxDayVal = 100;
 
-        // Scales
         const xScale = d3.scaleBand()
           .domain(diabetesCategories)
           .range([margin.left, margin.left + innerWidth])
@@ -294,7 +302,6 @@
           .range([3, 20])
           .clamp(true);
 
-        // Axes
         const xAxis = d3.axisBottom(xScale);
         const yAxis = d3.axisLeft(yScale);
 
@@ -310,7 +317,6 @@
           .selectAll("text")
           .style("font-size", "14px");
 
-        // Axis labels
         svg.append("text")
           .attr("x", margin.left + innerWidth / 2)
           .attr("y", margin.top + innerHeight + 50)
@@ -326,22 +332,14 @@
           .style("font-size", "16px")
           .text("Average Glucose Level (mg/dL)");
 
-        // Force simulation
         simulation = d3.forceSimulation(data)
-          .force("x",
-            d3.forceX(d => xScale(d.diabetes_status) + xScale.bandwidth() / 2).strength(0.2)
-          )
-          .force("y",
-            d3.forceY(d => yScale(d["day" + currentDay] || 0)).strength(0.4)
-          )
-          .force("collide",
-            d3.forceCollide(d => (d.bmi > 0 ? sizeScale(d.bmi) : 3))
-          )
+          .force("x", d3.forceX(d => xScale(d.diabetes_status) + xScale.bandwidth() / 2).strength(0.2))
+          .force("y", d3.forceY(d => yScale(d["day" + currentDay] || 0)).strength(0.4))
+          .force("collide", d3.forceCollide(d => (d.bmi > 0 ? sizeScale(d.bmi) : 3)))
           .alphaDecay(0)
           .alpha(0.3)
           .on("tick", ticked);
 
-        // Draw circles
         circles = svg.selectAll(".circ")
           .data(data)
           .enter()
@@ -376,15 +374,11 @@
             d3.select(this).transition().duration(200).style("opacity", 0.7);
           });
 
-        // Let the simulation decay after 3s
         setTimeout(() => simulation.alphaDecay(0.1), 3000);
 
-        /****************************************
-         *  LEGEND: top-right corner
-         ****************************************/
-        const legendBox = svg
-          .append("g")
-          .attr("transform", `translate(${width - 270}, ${margin.top + 50})`);
+        // Legend (same as before)
+        const legendBox = svg.append("g")
+          .attr("transform", `translate(${width - 270}, ${margin.top + 200})`);
 
         legendBox.append("rect")
           .attr("width", 240)
@@ -395,7 +389,6 @@
           .attr("ry", 10)
           .attr("opacity", 0.8);
 
-        // Title: "Key"
         legendBox.append("text")
           .attr("x", 120)
           .attr("y", 30)
@@ -404,7 +397,6 @@
           .style("font-weight", "bold")
           .text("Key");
 
-        // Underline for "Key"
         legendBox.append("line")
           .attr("x1", 105)
           .attr("x2", 135)
@@ -413,9 +405,7 @@
           .attr("stroke", "black")
           .attr("stroke-width", 1);
 
-        // BMI legend
-        let BMIlegend = legendBox
-          .append("g")
+        let BMIlegend = legendBox.append("g")
           .attr("transform", "translate(10, 80)");
 
         BMIlegend.append("text")
@@ -425,9 +415,7 @@
           .style("font-weight", "bold")
           .text("BMI Sizes");
 
-        // Gut Health legend
-        let GHlegend = legendBox
-          .append("g")
+        let GHlegend = legendBox.append("g")
           .attr("transform", "translate(10, 350)");
 
         GHlegend.append("text")
@@ -440,7 +428,6 @@
         [1, 2, 3].forEach((v, i) => {
           let gg = GHlegend.append("g")
             .attr("transform", `translate(0, ${i * 35 + 10})`);
-
           gg.append("rect")
             .attr("x", 0)
             .attr("y", -10)
@@ -449,7 +436,6 @@
             .attr("fill", gutColors[v] || "#999")
             .style("opacity", 0.7)
             .attr("stroke", "black");
-
           gg.append("text")
             .attr("x", 30)
             .attr("y", 5)
@@ -457,12 +443,10 @@
             .text(healthLabels[v]);
         });
 
-        // Show multiple BMI examples
         const BMI_VALUES = [20, 25, 30, 35, 40, 50];
         BMI_VALUES.forEach((b, i) => {
           let g = BMIlegend.append("g")
             .attr("transform", `translate(20, ${i * 38})`);
-
           g.append("circle")
             .attr("cx", 30)
             .attr("cy", 0)
@@ -470,7 +454,6 @@
             .attr("fill", "gray")
             .attr("stroke", "black")
             .style("opacity", 0.7);
-
           g.append("text")
             .attr("x", 70)
             .attr("y", 5)
@@ -484,37 +467,33 @@
       }
 
       /**********************************************
-       *  3) UPDATE DAY
+       * UPDATE DAY
        **********************************************/
       function updateDay(day) {
         currentDay = day;
         if (!simulation) return;
-
-        simulation.force(
-          "y",
-          d3.forceY(d => yScale(d["day" + day] || 0)).strength(0.4)
-        );
+        simulation.force("y", d3.forceY(d => yScale(d["day" + day] || 0)).strength(0.4));
         simulation.alpha(0.5).restart();
-
-        // Update the pinned day indicator
         const dayIndicator = document.getElementById("dayIndicator");
         dayIndicator.textContent = `Day ${day}`;
         dayIndicator.style.display = "block";
       }
 
       /**********************************************
-       *  4) SCROLLAMA SETUP & HANDLE STEP ENTER
+       * SCROLLAMA SETUP & CALLBACKS
        **********************************************/
       function handleStepEnter(response) {
-        // Get the day from data-day attribute (if it's not a number, use it directly)
         let dayAttr = response.element.getAttribute("data-day");
-        let day = isNaN(dayAttr) ? dayAttr : +dayAttr;
-        updateDay(day);
-
-        // Update annotation text based on the current step/day
         const annotationDiv = document.getElementById("annotation");
+        // If the dummy step is reached, exit the scrolly and hide the annotation
+        if (dayAttr === "end") {
+          document.getElementById("chartContainer").classList.add("exit");
+          annotationDiv.style.display = "none";
+          return;
+        }
+        let day = +dayAttr;
+        updateDay(day);
         let textToShow = "";
-
         if (day === 1) {
           textToShow = annotations[1];
         } else if (day === 2) {
@@ -523,10 +502,7 @@
           textToShow = annotations[8];
         } else if (day === 10) {
           textToShow = annotations[10];
-        } else {
-          textToShow = "";
         }
-
         if (textToShow !== "") {
           annotationDiv.innerHTML = textToShow;
           annotationDiv.style.display = "block";
@@ -535,22 +511,29 @@
         }
       }
 
+      function handleStepExit(response) {
+        let dayAttr = response.element.getAttribute("data-day");
+        // When scrolling upward out of the dummy step, remove the exit class to restore scrolly behavior
+        if (dayAttr === "end" && response.direction === "up") {
+          document.getElementById("chartContainer").classList.remove("exit");
+        }
+      }
+
       function initScroller() {
         const scroller = scrollama();
-        scroller
-          .setup({
-            step: ".step",
-            offset: 0.6,
-            debug: false
-          })
-          .onStepEnter(handleStepEnter);
+        scroller.setup({
+          step: ".step",
+          offset: 0.6,
+          debug: false
+        })
+        .onStepEnter(handleStepEnter)
+        .onStepExit(handleStepExit);
       }
 
       /**********************************************
-       *  5) LOAD DATA & INIT
+       * LOAD DATA & INITIALIZE
        **********************************************/
       d3.csv("data.csv").then(data => {
-        // Parse numeric fields
         data.forEach(d => {
           for (let i = 1; i <= 10; i++) {
             d["day" + i] = +d["day" + i] || 0;
@@ -559,13 +542,10 @@
           d.gut_microbiome_health = +d.gut_microbiome_health || 1;
         });
         globalData = data;
-
-        // Initialize chart + scroller
         initChart(globalData);
         initScroller();
       });
 
-      // Re-init on resize
       window.addEventListener("resize", () => {
         if (!globalData.length) return;
         initChart(globalData);
