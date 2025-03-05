@@ -78,27 +78,61 @@
         background: rgba(255, 255, 255, 0.8);
         padding: 6px 12px;
         border-radius: 4px;
-        pointer-events: none; /* so mouse events pass through */
-        display: none;       /* show once we scroll to the first day */
+        pointer-events: none;
+        display: none;
+      }
+
+      /* Annotation container (fixed position for scroll-triggered annotations) */
+      #annotation {
+        position: fixed;
+        top: 150px;
+        right: 20px;
+        max-width: 300px;
+        background: rgba(255, 255, 255, 0.8);
+        padding: 10px;
+        border-radius: 8px;
+        display: none;
+        z-index: 2;
+        font-size: 14px;
       }
 
       /* SCROLLY steps (one per day) */
       #scrolly {
         width: 100%;
+        /* Ensure the container is tall enough to allow scrolling past all steps */
+        min-height: calc(100vh * 10);
       }
       .step {
-        min-height: 100vh; /* each step is a full screen so the user can scroll through them */
+        min-height: 100vh;
         padding: 2rem 1rem;
         box-sizing: border-box;
       }
       .step h2 {
         margin-bottom: 1rem;
       }
+
+      /* Static Annotation Section (normal flow element) */
+      #staticAnnotation {
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 1rem;
+        font-size: 16px;
+        line-height: 1.5em;
+        background: #f9f9f9;
+        border-top: 1px solid #ccc;
+      }
+      #staticAnnotation h2 {
+        font-size: 22px;
+        margin-bottom: 0.5rem;
+      }
+      #staticAnnotation p {
+        margin-bottom: 1.5rem;
+      }
     </style>
   </head>
 
   <body>
-    <!-- "Learn More" link to writeup.html -->
+    <!-- "Learn More" link -->
     <a id="learnMoreLink" href="writeup.html" target="_blank">Learn More</a>
 
     <!-- Title & subtitle -->
@@ -117,6 +151,9 @@
       <svg id="chart"></svg>
       <div id="dayIndicator">Day 1</div>
     </div>
+
+    <!-- Scroll-triggered Annotation container -->
+    <div id="annotation"></div>
 
     <!-- Scrolling text for each day -->
     <div id="scrolly">
@@ -162,6 +199,14 @@
       </div>
     </div>
 
+    <!-- Static Annotation Section (appears after scrolly content) -->
+    <div id="staticAnnotation">
+      <h2>Next Visualization</h2>
+      <p>
+        Diabetes and insulin resistance develop over years as the body starts to struggle to regulate blood sugar effectively. Diet plays a very crucial role in this process as different foods affect glucose levels in unique ways. Everyone’s body responds to food differently and can cause different levels of glucose spikes. By recognizing how fat, sugar, and carbohydrates impact blood sugar, we gain a better understanding of glucose patterns amongst different diabetic statuses. The next visualization explores these effects in more detail.
+      </p>
+    </div>
+
     <script>
       /**********************************************
        *  1) GLOBAL VARIABLES
@@ -175,6 +220,20 @@
       const diabetesCategories = ["Non-Diabetic", "Pre-Diabetic", "Type 2 Diabetic"];
       const gutColors = { 1: "#a8c8ea", 2: "#4f93d2", 3: "#084594" };
       const healthLabels = { 1: "Healthy", 2: "Moderate", 3: "Unhealthy" };
+
+      /**********************************************
+       *  Annotation Texts (Scroll-Triggered Only)
+       **********************************************/
+      const annotations = {
+        // Intro (Day 1)
+        1: `Blood sugar follows patterns, and these patterns matter. Frequent spikes and crashes can lead to fatigue, cravings, and long-term damage to blood vessels, even in those who appear healthy. Tracking glucose variability offers a deeper understanding of metabolic health, revealing risks that a single reading might miss.`,
+        // Between Day 2 and 3 (assigned to Day 2)
+        2: `At first glance, the glucose levels appear steady, but stability doesn’t always mean balance. For those with prediabetes or Type 2 diabetes, a seemingly normal glucose level can still mask underlying insulin resistance and unhealthy glucose levels.`,
+        // Between Day 8 and 9 (assigned to Day 8)
+        8: `The degree of variability can help indicate metabolic health. In this visualization, you can see how the variability of glucose levels between non-diabetics, prediabetics, and Type 2 diabetics range.`,
+        // Day 10 scroll-triggered annotation (with CDC info)
+        10: `Observing the variability in glucose levels across different diabetic categories highlights just how drastically blood sugar control can differ from person to person. According to the CDC, 1 in 3 adults in the U.S. has prediabetes, but 80% are unaware of it. Understanding what influences glucose levels and tracking glucose variability can serve as an early warning sign and help individuals take proactive steps toward a healthier lifestyle. <a href="https://www.cdc.gov/diabetes/communication-resources/1-in-3-americans.html" target="_blank">Learn more at CDC</a>`
+      };
 
       /**********************************************
        *  2) INIT CHART
@@ -292,33 +351,30 @@
           .attr("fill", d => gutColors[d.gut_microbiome_health] || "#999")
           .attr("r", d => (d.bmi > 0 ? sizeScale(d.bmi) : 3))
           .style("opacity", 0.7)
-          
           .on("mouseover", function(d) {
-  console.log("mouseover event fired for:", d);
-  tooltip.style("visibility", "visible")
-         .style("z-index", "10000");
-  d3.select(this).transition().duration(200).style("opacity", 1);
-})
-.on("mousemove", function(d) {
-  let e = d3.event;
-  let healthStatus = healthLabels[d.gut_microbiome_health] || "Unknown";
-  tooltip.html(`
-    <b>ID:</b> ${d.participant_id}<br/>
-    Gender: ${d.gender}<br/>
-    Age: ${d.age}<br/>
-    Gut: ${healthStatus}<br/>
-    BMI: ${d.bmi.toFixed(2)}<br/>
-    Avg. Glucose (Day ${currentDay}): ${d["day" + currentDay].toFixed(2)}
-  `);
-  let tipH = tooltip.node().offsetHeight;
-  tooltip.style("left", e.pageX + "px")
-         .style("top", (e.pageY - tipH - 5) + "px");
-})
-.on("mouseout", function() {
-  tooltip.style("visibility", "hidden");
-  d3.select(this).transition().duration(200).style("opacity", 0.7);
-});
-
+            tooltip.style("visibility", "visible")
+              .style("z-index", "10000");
+            d3.select(this).transition().duration(200).style("opacity", 1);
+          })
+          .on("mousemove", function(d) {
+            let e = d3.event;
+            let healthStatus = healthLabels[d.gut_microbiome_health] || "Unknown";
+            tooltip.html(`
+              <b>ID:</b> ${d.participant_id}<br/>
+              Gender: ${d.gender}<br/>
+              Age: ${d.age}<br/>
+              Gut: ${healthStatus}<br/>
+              BMI: ${d.bmi.toFixed(2)}<br/>
+              Avg. Glucose (Day ${currentDay}): ${d["day" + currentDay].toFixed(2)}
+            `);
+            let tipH = tooltip.node().offsetHeight;
+            tooltip.style("left", e.pageX + "px")
+                   .style("top", (e.pageY - tipH - 5) + "px");
+          })
+          .on("mouseout", function() {
+            tooltip.style("visibility", "hidden");
+            d3.select(this).transition().duration(200).style("opacity", 0.7);
+          });
 
         // Let the simulation decay after 3s
         setTimeout(() => simulation.alphaDecay(0.1), 3000);
@@ -440,19 +496,43 @@
         );
         simulation.alpha(0.5).restart();
 
-        // Show or update the pinned day indicator
+        // Update the pinned day indicator
         const dayIndicator = document.getElementById("dayIndicator");
         dayIndicator.textContent = `Day ${day}`;
         dayIndicator.style.display = "block";
       }
 
       /**********************************************
-       *  4) SCROLLAMA SETUP
+       *  4) SCROLLAMA SETUP & HANDLE STEP ENTER
        **********************************************/
       function handleStepEnter(response) {
-        // Get the day from data-day attribute
-        const day = +response.element.getAttribute("data-day");
+        // Get the day from data-day attribute (if it's not a number, use it directly)
+        let dayAttr = response.element.getAttribute("data-day");
+        let day = isNaN(dayAttr) ? dayAttr : +dayAttr;
         updateDay(day);
+
+        // Update annotation text based on the current step/day
+        const annotationDiv = document.getElementById("annotation");
+        let textToShow = "";
+
+        if (day === 1) {
+          textToShow = annotations[1];
+        } else if (day === 2) {
+          textToShow = annotations[2];
+        } else if (day === 8) {
+          textToShow = annotations[8];
+        } else if (day === 10) {
+          textToShow = annotations[10];
+        } else {
+          textToShow = "";
+        }
+
+        if (textToShow !== "") {
+          annotationDiv.innerHTML = textToShow;
+          annotationDiv.style.display = "block";
+        } else {
+          annotationDiv.style.display = "none";
+        }
       }
 
       function initScroller() {
@@ -460,7 +540,7 @@
         scroller
           .setup({
             step: ".step",
-            offset: 0.6, // triggers near 60% of viewport
+            offset: 0.6,
             debug: false
           })
           .onStepEnter(handleStepEnter);
