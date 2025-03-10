@@ -145,6 +145,41 @@
       margin: 0 auto;
       text-align: center; /* Optional: Center the text inside the div */
       }
+      /* Add these styles in your existing <style> section */
+      #chartContainer.scrolled {
+        width: 65%;
+        height: 80vh;
+        margin-left: 2%;
+      }
+      .legend {
+        transition: all 0.5s ease;
+      }
+      /* Horizontal legend styles */
+      .legend-horizontal {
+        transform: translate(50%, 20px);
+      }
+      .legend-vertical {
+        transform: translate(calc(100% - 290px), 200px);
+      }
+      /* Legend styles */
+      .legend {
+        font-size: 14px;
+        font-weight: bold;
+        text-anchor: middle;
+      }
+
+      /* Adjust annotation positioning for scrolled state */
+      #annotation.scrolled {
+        top: 50%;
+        right: 2%;
+        width: 28%;
+        transform: translateY(-50%);
+        background: rgba(255, 255, 255, 0.95);
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        padding: 20px;
+        max-height: 70vh;
+        overflow-y: auto;
+      }
 
     </style>
   </head>
@@ -176,44 +211,44 @@
     <!-- Scrolly narrative steps -->
     <div id="scrolly">
       <div class="step" data-day="1">
-        <h2>Day 1</h2>
-        <p>Observations about Day 1. For example: Non-Diabetics cluster around X mg/dL...</p>
+        <!-- <h2>Day 1</h2>
+        <p>Observations about Day 1. For example: Non-Diabetics cluster around X mg/dL...</p> -->
       </div>
       <div class="step" data-day="2">
-        <h2>Day 2</h2>
-        <p>Observations about Day 2...</p>
+        <!-- <h2>Day 2</h2>
+        <p>Observations about Day 2...</p> -->
       </div>
       <div class="step" data-day="3">
-        <h2>Day 3</h2>
-        <p>Observations about Day 3...</p>
+        <!-- <h2>Day 3</h2>
+        <p>Observations about Day 3...</p> -->
       </div>
       <div class="step" data-day="4">
-        <h2>Day 4</h2>
-        <p>Observations about Day 4...</p>
+        <!-- <h2>Day 4</h2>
+        <p>Observations about Day 4...</p> -->
       </div>
       <div class="step" data-day="5">
-        <h2>Day 5</h2>
-        <p>Observations about Day 5...</p>
+        <!-- <h2>Day 5</h2>
+        <p>Observations about Day 5...</p> -->
       </div>
       <div class="step" data-day="6">
-        <h2>Day 6</h2>
-        <p>Observations about Day 6...</p>
+        <!-- <h2>Day 6</h2>
+        <p>Observations about Day 6...</p> -->
       </div>
       <div class="step" data-day="7">
-        <h2>Day 7</h2>
-        <p>Observations about Day 7...</p>
+        <!-- <h2>Day 7</h2>
+        <p>Observations about Day 7...</p> -->
       </div>
       <div class="step" data-day="8">
-        <h2>Day 8</h2>
-        <p>Observations about Day 8...</p>
+        <!-- <h2>Day 8</h2>
+        <p>Observations about Day 8...</p> -->
       </div>
       <div class="step" data-day="9">
-        <h2>Day 9</h2>
-        <p>Observations about Day 9...</p>
+        <!-- <h2>Day 9</h2>
+        <p>Observations about Day 9...</p> -->
       </div>
       <div class="step" data-day="10">
-        <h2>Day 10</h2>
-        <p>Concluding remarks about Day 10...</p>
+        <!-- <h2>Day 10</h2>
+        <p>Concluding remarks about Day 10...</p> -->
       </div>
       <!-- Dummy step triggers the exit from scrolly behavior -->
       <div class="step dummy" data-day="end"></div>
@@ -263,215 +298,280 @@
       /**********************************************
        * INIT CHART
        **********************************************/
-      function initChart(data) {
-        // Clear previous chart content
-        d3.select("#chart").selectAll("*").remove();
-        d3.selectAll(".tooltip").remove();
+       function initChart(data) {
+        try {
+          // Clear previous chart content with proper cleanup
+          if (simulation) simulation.stop();
+          d3.select("#chart").selectAll("*").remove();
+          d3.selectAll(".tooltip").remove();
 
-        const container = document.getElementById("chartContainer");
-        const width = container.clientWidth;
-        const height = container.clientHeight;
+          // Show loading state
+          const container = document.getElementById("chartContainer");
+          const width = container.clientWidth;
+          const height = container.clientHeight;
 
-        svg = d3.select("#chart")
-          .attr("width", width)
-          .attr("height", height);
+          svg = d3.select("#chart")
+            .attr("width", width)
+            .attr("height", height)
+            .attr("aria-label", "Glucose patterns visualization");
 
-        tooltip = d3.select("body")
-          .append("div")
-          .style("position", "absolute")
-          .style("visibility", "hidden")
-          .style("background", "#fff")
-          .style("padding", "8px")
-          .style("border", "1px solid #000")
-          .style("border-radius", "5px")
-          .style("box-shadow", "2px 2px 10px rgba(0,0,0,0.5)")
-          .style("pointer-events", "none");
+          // Improved tooltip with better positioning
+          tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("position", "absolute")
+            .style("visibility", "hidden")
+            .style("background", "#fff")
+            .style("padding", "8px")
+            .style("border", "1px solid #000")
+            .style("border-radius", "5px")
+            .style("box-shadow", "2px 2px 10px rgba(0,0,0,0.5)")
+            .style("pointer-events", "none")
+            .style("z-index", "1000");
 
-        const margin = { top: 130, right: 100, bottom: 100, left: 150 };
-        const innerWidth = width - margin.left - margin.right;
-        const innerHeight = height - margin.top - margin.bottom;
+          const margin = { top: 130, right: 100, bottom: 100, left: 150 };
+          const innerWidth = width - margin.left - margin.right;
+          const innerHeight = height - margin.top - margin.bottom;
 
-        // Calculate max glucose value across all 10 days
-        let allDays = [];
-        for (let i = 1; i <= 10; i++) {
-          data.forEach(d => allDays.push(d["day" + i]));
-        }
-        let maxDayVal = d3.max(allDays) || 100;
-        if (maxDayVal < 0) maxDayVal = 100;
+          // Optimized data calculations
+          const allDays = Array.from({ length: 10 }, (_, i) => 
+            data.map(d => d[`day${i + 1}`])
+          ).flat();
+          const maxDayVal = Math.max(d3.max(allDays) || 100, 100);
 
-        const xScale = d3.scaleBand()
-          .domain(diabetesCategories)
-          .range([margin.left, margin.left + innerWidth])
-          .padding(0.5);
+          const xScale = d3.scaleBand()
+            .domain(diabetesCategories)
+            .range([margin.left, margin.left + innerWidth])
+            .padding(0.5);
 
-        yScale = d3.scaleLinear()
-          .domain([0, maxDayVal])
-          .range([margin.top + innerHeight, margin.top]);
+          yScale = d3.scaleLinear()
+            .domain([0, maxDayVal])
+            .range([margin.top + innerHeight, margin.top]);
 
-        const bmiExtent = d3.extent(data, d => d.bmi);
-        const sizeScale = d3.scaleLinear()
-          .domain(bmiExtent)
-          .range([3, 20])
-          .clamp(true);
+          const bmiExtent = d3.extent(data, d => d.bmi);
+          const sizeScale = d3.scaleLinear()
+            .domain(bmiExtent)
+            .range([3, 20])
+            .clamp(true);
 
-        const xAxis = d3.axisBottom(xScale);
-        const yAxis = d3.axisLeft(yScale);
+          // Add axes with improved styling
+          const xAxis = d3.axisBottom(xScale);
+          const yAxis = d3.axisLeft(yScale).ticks(10);
 
-        svg.append("g")
-          .attr("transform", `translate(0, ${margin.top + innerHeight})`)
-          .call(xAxis)
-          .selectAll("text")
-          .style("font-size", "14px");
+          svg.append("g")
+            .attr("class", "x-axis")
+            .attr("transform", `translate(0, ${margin.top + innerHeight})`)
+            .call(xAxis)
+            .selectAll("text")
+            .style("font-size", "14px");
 
-        svg.append("g")
-          .attr("transform", `translate(${margin.left}, 0)`)
-          .call(yAxis)
-          .selectAll("text")
-          .style("font-size", "14px");
+          svg.append("g")
+            .attr("class", "y-axis")
+            .attr("transform", `translate(${margin.left}, 0)`)
+            .call(yAxis)
+            .selectAll("text")
+            .style("font-size", "14px");
 
-        svg.append("text")
-          .attr("x", margin.left + innerWidth / 2)
-          .attr("y", margin.top + innerHeight + 50)
-          .attr("text-anchor", "middle")
-          .style("font-size", "16px")
-          .text("Diabetes Status");
+          // Add axis labels
+          svg.append("text")
+            .attr("class", "x-label")
+            .attr("x", margin.left + innerWidth / 2)
+            .attr("y", margin.top + innerHeight + 50)
+            .attr("text-anchor", "middle")
+            .style("font-size", "16px")
+            .text("Diabetes Status");
 
-        svg.append("text")
-          .attr("x", - (margin.top + innerHeight / 2))
-          .attr("y", margin.left - 70)
-          .attr("text-anchor", "middle")
-          .attr("transform", "rotate(-90)")
-          .style("font-size", "16px")
-          .text("Average Glucose Level (mg/dL)");
+          svg.append("text")
+            .attr("class", "y-label")
+            .attr("x", -(margin.top + innerHeight / 2))
+            .attr("y", margin.left - 70)
+            .attr("text-anchor", "middle")
+            .attr("transform", "rotate(-90)")
+            .style("font-size", "16px")
+            .text("Average Glucose Level (mg/dL)");
 
-        simulation = d3.forceSimulation(data)
-          .force("x", d3.forceX(d => xScale(d.diabetes_status) + xScale.bandwidth() / 2).strength(0.2))
-          .force("y", d3.forceY(d => yScale(d["day" + currentDay] || 0)).strength(0.4))
-          .force("collide", d3.forceCollide(d => (d.bmi > 0 ? sizeScale(d.bmi) : 3)))
-          .alphaDecay(0)
-          .alpha(0.3)
-          .on("tick", ticked);
+          // Optimized force simulation
+          simulation = d3.forceSimulation(data)
+            .force("x", d3.forceX(d => xScale(d.diabetes_status) + xScale.bandwidth() / 2).strength(0.2))
+            .force("y", d3.forceY(d => yScale(d["day" + currentDay] || 0)).strength(0.4))
+            .force("collide", d3.forceCollide(d => (d.bmi > 0 ? sizeScale(d.bmi) : 3)).iterations(2))
+            .alphaDecay(0.01)
+            .alpha(0.3)
+            .on("tick", () => {
+              requestAnimationFrame(() => {
+                circles.attr("cx", d => d.x)
+                      .attr("cy", d => d.y);
+              });
+            });
 
-        circles = svg.selectAll(".circ")
-          .data(data)
-          .enter()
-          .append("circle")
-          .attr("class", "circ")
-          .attr("stroke", "black")
-          .attr("fill", d => gutColors[d.gut_microbiome_health] || "#999")
-          .attr("r", d => (d.bmi > 0 ? sizeScale(d.bmi) : 3))
-          .style("opacity", 0.7)
-          .on("mouseover", function(d) {
-            tooltip.style("visibility", "visible")
-              .style("z-index", "10000");
-            d3.select(this).transition().duration(200).style("opacity", 1);
-          })
-          .on("mousemove", function(d) {
-            let e = d3.event;
-            let healthStatus = healthLabels[d.gut_microbiome_health] || "Unknown";
-            tooltip.html(`
-              <b>ID:</b> ${d.participant_id}<br/>
-              Gender: ${d.gender}<br/>
-              Age: ${d.age}<br/>
-              Gut: ${healthStatus}<br/>
-              BMI: ${d.bmi.toFixed(2)}<br/>
-              Avg. Glucose (Day ${currentDay}): ${d["day" + currentDay].toFixed(2)}
-            `);
-            let tipH = tooltip.node().offsetHeight;
-            tooltip.style("left", e.pageX + "px")
-                   .style("top", (e.pageY - tipH - 5) + "px");
-          })
-          .on("mouseout", function() {
-            tooltip.style("visibility", "hidden");
-            d3.select(this).transition().duration(200).style("opacity", 0.7);
-          });
+          // Improved circle rendering with better event handling
+          circles = svg.selectAll(".circ")
+            .data(data)
+            .enter()
+            .append("circle")
+            .attr("class", "circ")
+            .attr("stroke", "black")
+            .attr("fill", d => gutColors[d.gut_microbiome_health] || "#999")
+            .attr("r", d => (d.bmi > 0 ? sizeScale(d.bmi) : 3))
+            .style("opacity", 0.7)
+            .on("mouseover", function(d) {
+              tooltip.style("visibility", "visible");
+              d3.select(this)
+                .transition()
+                .duration(200)
+                .style("opacity", 1)
+                .attr("stroke-width", 2);
+            })
+            .on("mousemove", function(d) {
+              const e = d3.event;
+              const healthStatus = healthLabels[d.gut_microbiome_health] || "Unknown";
+              const tooltipContent = `
+                <b>ID:</b> ${d.participant_id}<br/>
+                Gender: ${d.gender}<br/>
+                Age: ${d.age}<br/>
+                Gut: ${healthStatus}<br/>
+                BMI: ${d.bmi.toFixed(2)}<br/>
+                Avg. Glucose (Day ${currentDay}): ${d["day" + currentDay].toFixed(2)}
+              `;
+              
+              tooltip.html(tooltipContent);
+              
+              // Improved tooltip positioning
+              const tooltipNode = tooltip.node();
+              const tooltipRect = tooltipNode.getBoundingClientRect();
+              const xPosition = e.pageX + 10;
+              const yPosition = e.pageY - tooltipRect.height - 10;
+              
+              tooltip
+                .style("left", `${xPosition}px`)
+                .style("top", `${yPosition}px`);
+            })
+            .on("mouseout", function() {
+              tooltip.style("visibility", "hidden");
+              d3.select(this)
+                .transition()
+                .duration(200)
+                .style("opacity", 0.7)
+                .attr("stroke-width", 1);
+            });
 
-        setTimeout(() => simulation.alphaDecay(0.1), 3000);
+          // Responsive legend positioning
+          const legendX = width > 1200 ? width - 270 : width - 220;
+          // Horizontal legend at the top
+          const legendBox = svg.append("g")
+          .attr("class", "legend legend-vertical")
+          .attr("transform", `translate(${legendX}, ${margin.top + 200})`
+          );
+          // Add legend items
+          legendBox.selectAll(".legend-item")
+           .data(diabetesCategories)
+           .enter()
+           .append("g")
+           .attr("class", "legend-item")
+           .attr("transform", (d, i) => `translate(0, ${i * 40})`); 
 
-        // Legend (same as before)
-        const legendBox = svg.append("g")
-          .attr("transform", `translate(${width - 270}, ${margin.top + 200})`);
+          // Add legend background
+          legendBox.append("rect")
+            .attr("width", innerWidth)
+            .attr("height", 80)
+            .attr("fill", "white")
+            .attr("stroke", "black")
+            .attr("rx", 10)
+            .attr("ry", 10)
+            .attr("opacity", 0.8);
 
-        legendBox.append("rect")
-          .attr("width", 240)
-          .attr("height", 450)
-          .attr("fill", "white")
-          .attr("stroke", "black")
-          .attr("rx", 10)
-          .attr("ry", 10)
-          .attr("opacity", 0.8);
+          // Add legend title
+          legendBox.append("text")
+            .attr("x", 120)
+            .attr("y", 30)
+            .attr("text-anchor", "middle")
+            .style("font-size", "16px")
+            .style("font-weight", "bold")
+            .text("Key");
 
-        legendBox.append("text")
-          .attr("x", 120)
-          .attr("y", 30)
-          .attr("text-anchor", "middle")
-          .style("font-size", "16px")
-          .style("font-weight", "bold")
-          .text("Key");
+          legendBox.append("line")
+            .attr("x1", 105)
+            .attr("x2", 135)
+            .attr("y1", 35)
+            .attr("y2", 35)
+            .attr("stroke", "black")
+            .attr("stroke-width", 1);
 
-        legendBox.append("line")
-          .attr("x1", 105)
-          .attr("x2", 135)
-          .attr("y1", 35)
-          .attr("y2", 35)
-          .attr("stroke", "black")
-          .attr("stroke-width", 1);
+          // BMI Legend - horizontal
+          const BMIlegend = legendBox.append("g")
+            .attr("transform", "translate(20, 20)");
 
-        let BMIlegend = legendBox.append("g")
-          .attr("transform", "translate(10, 80)");
-
-        BMIlegend.append("text")
-          .attr("x", 0)
-          .attr("y", -10)
-          .style("font-size", "14px")
-          .style("font-weight", "bold")
-          .text("BMI Sizes");
-
-        let GHlegend = legendBox.append("g")
-          .attr("transform", "translate(10, 350)");
-
-        GHlegend.append("text")
-          .attr("x", 0)
-          .attr("y", -10)
-          .style("font-size", "14px")
-          .style("font-weight", "bold")
-          .text("Gut Health");
-
-        [1, 2, 3].forEach((v, i) => {
-          let gg = GHlegend.append("g")
-            .attr("transform", `translate(0, ${i * 35 + 10})`);
-          gg.append("rect")
+          BMIlegend.append("text")
             .attr("x", 0)
             .attr("y", -10)
-            .attr("width", 20)
-            .attr("height", 20)
-            .attr("fill", gutColors[v] || "#999")
-            .style("opacity", 0.7)
-            .attr("stroke", "black");
-          gg.append("text")
-            .attr("x", 30)
-            .attr("y", 5)
             .style("font-size", "14px")
-            .text(healthLabels[v]);
-        });
+            .style("font-weight", "bold")
+            .text("BMI Sizes");
 
-        const BMI_VALUES = [20, 25, 30, 35, 40, 50];
-        BMI_VALUES.forEach((b, i) => {
-          let g = BMIlegend.append("g")
-            .attr("transform", `translate(20, ${i * 38})`);
-          g.append("circle")
-            .attr("cx", 30)
-            .attr("cy", 0)
-            .attr("r", sizeScale(b))
-            .attr("fill", "gray")
-            .attr("stroke", "black")
-            .style("opacity", 0.7);
-          g.append("text")
-            .attr("x", 70)
-            .attr("y", 5)
+          // Gut Health Legend
+          const GHlegend = legendBox.append("g")
+            .attr("transform", "translate(20, 50)");
+
+          GHlegend.append("text")
+            .attr("x", 0)
+            .attr("y", -10)
             .style("font-size", "14px")
-            .text(`BMI: ${b}`);
-        });
+            .style("font-weight", "bold")
+            .text("Gut Health");
+
+          // Add gut health indicators
+          [1, 2, 3].forEach((v, i) => {
+            const gg = GHlegend.append("g")
+              .attr("transform", `translate(0, ${i * 150 + 100}, 0)`);
+            
+            gg.append("rect")
+              .attr("x", 0)
+              .attr("y", -10)
+              .attr("width", 20)
+              .attr("height", 20)
+              .attr("fill", gutColors[v] || "#999")
+              .style("opacity", 0.7)
+              .attr("stroke", "black");
+            
+            gg.append("text")
+              .attr("x", 30)
+              .attr("y", 5)
+              .style("font-size", "14px")
+              .text(healthLabels[v]);
+          });
+
+          // Add BMI indicators
+          const BMI_VALUES = [20, 25, 30, 35, 40, 50];
+          BMI_VALUES.forEach((b, i) => {
+            const g = BMIlegend.append("g")
+              .attr("transform", `translate(${i * 100 + 60}, 0)`);
+            
+            g.append("circle")
+              .attr("cx", 30)
+              .attr("cy", 0)
+              .attr("r", sizeScale(b))
+              .attr("fill", "gray")
+              .attr("stroke", "black")
+              .style("opacity", 0.7);
+            
+            g.append("text")
+              .attr("x", 20)
+              .attr("y", 15)
+              .style("font-size", "14px")
+              .text(`BMI: ${b}`);
+          });
+
+          // Gradual decay for smoother transitions
+          setTimeout(() => simulation.alphaDecay(0.1), 3000);
+
+        } catch (error) {
+          console.error("Error initializing chart:", error);
+          svg.append("text")
+            .attr("x", width / 2)
+            .attr("y", height / 2)
+            .attr("text-anchor", "middle")
+            .text("Error loading visualization");
+        }
       }
 
       function ticked() {
@@ -494,15 +594,31 @@
       /**********************************************
        * SCROLLAMA SETUP & CALLBACKS
        **********************************************/
-      function handleStepEnter(response) {
+       function handleStepEnter(response) {
         let dayAttr = response.element.getAttribute("data-day");
         const annotationDiv = document.getElementById("annotation");
-        // If the dummy step is reached, exit the scrolly and hide the annotation
+        const chartContainer = document.getElementById("chartContainer");
+        const legendElement = d3.select(".legend");
+        
+        // If the dummy step is reached
         if (dayAttr === "end") {
-          document.getElementById("chartContainer").classList.add("exit");
+          chartContainer.classList.add("exit");
+          chartContainer.classList.remove("scrolled");
+          annotationDiv.classList.remove("scrolled");
           annotationDiv.style.display = "none";
+          legendElement.classed("legend-horizontal", false)
+                      .classed("legend-vertical", true);
           return;
         }
+
+        // Add scrolled class when entering any day
+        if (dayAttr !== "end") {
+          chartContainer.classList.add("scrolled");
+          annotationDiv.classList.add("scrolled");
+          legendElement.classed("legend-vertical", false)
+                      .classed("legend-horizontal", true);
+        }
+
         let day = +dayAttr;
         updateDay(day);
         let textToShow = "";
@@ -521,6 +637,9 @@
         } else {
           annotationDiv.style.display = "none";
         }
+        
+        // Reinitialize chart with new dimensions
+        initChart(globalData);
       }
 
       function handleStepExit(response) {
